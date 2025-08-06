@@ -119,7 +119,7 @@ Lets you search for comma-separated phrases in the decompiled folder. Useful for
 
 clear_old_apk_files()
 Deletes everything except the dependencies folder to start fresh.
-
+```
 🎓 Real World Example / Inspiration
 Inspired by this article:
 Reverse [engineering YI Home app to remove ads]
@@ -127,7 +127,6 @@ Reverse [engineering YI Home app to remove ads]
 
 That blog walks through a manual workflow to remove advertisements from an Android camera app. My script automates that process and provides a repeatable setup for future mods.
 
-```
 
 🧠 Tips for Beginners
 Enable USB Debugging on your phone (found in Developer Options)
