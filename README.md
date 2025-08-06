@@ -44,13 +44,14 @@ Think of it as your **offline alternative** to GUI tools like APK Easy Tool — 
 
 After running the script, all files are managed under:
 
+```text
 ~/Desktop/Apk_Patch/
 │
 ├── dependencies/ # All tools and JARs downloaded automatically
 ├── base/ # Decompiled APK contents
 ├── signed/ # Final signed APKs ready to install
 └── \*\_patched.apk # Intermediate rebuilt APK
-
+```
 ---
 
 ## 🔧 Setup Instructions
@@ -122,8 +123,7 @@ Deletes everything except the dependencies folder to start fresh.
 ```
 🎓 Real World Example / Inspiration
 Inspired by this article:
-Reverse [engineering YI Home app to remove ads]
-(https://scognito.wordpress.com/2025/05/20/reverse-engineering-yi-home-app-to-remove-ads/)
+Reverse [engineering YI Home app to remove ads](https://scognito.wordpress.com/2025/05/20/reverse-engineering-yi-home-app-to-remove-ads/)
 
 That blog walks through a manual workflow to remove advertisements from an Android camera app. My script automates that process and provides a repeatable setup for future mods.
 
