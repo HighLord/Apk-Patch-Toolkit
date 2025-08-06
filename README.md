@@ -2,7 +2,7 @@
 
 ## 📦 Description
 
-A beginner-friendly Python tool for **automating the APK patching pipeline** — from pulling APKs off an Android device, unpacking, modifying, rebuilding, signing, and installing them — all through a guided command-line interface.
+A beginner-friendly Python tool for **automating the APK patching pipeline** from pulling APKs off an Android device, unpacking, modifying, rebuilding, signing, and installing them, all through a guided command-line interface.
 
 This script is useful for Android enthusiasts, modders, researchers, or developers who want to reverse engineer APK files to analyze, modify, or clean up applications, such as removing ads, customizing behavior, or conducting educational research.
 

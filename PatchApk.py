@@ -355,8 +355,7 @@ def select_Apk():
             else:
                 print(f"\n[✔] APK file selected: {selected_path}")
 
-                filename = os.path.basename(selected_path)
-                destination_path = os.path.join(APK_PATCH_DIR, filename)
+                destination_path = os.path.join(APK_PATCH_DIR, "base.apk")
 
                 try:
                     shutil.copy2(selected_path, destination_path)
