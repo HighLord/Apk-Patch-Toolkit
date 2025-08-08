@@ -640,12 +640,12 @@ def search():
         print(f"[!] Base folder not found at: {base_folder}")
         return
     
-    keywords_input = input("Enter keyword(s) or sentence(s) separated by commas: ").strip()
+    keywords_input = input("Enter keyword(s) or sentence(s) separated by |: ").strip()
     if not keywords_input:
         print("[!] No keywords provided.")
         return
 
-    keywords = [' '.join(kw.strip().lower().split()) for kw in keywords_input.split(",") if kw.strip()]
+    keywords = [' '.join(kw.strip().lower().split()) for kw in keywords_input.split("|") if kw.strip()]
 
     matched_results = []
     all_files = []
