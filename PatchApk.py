@@ -9,10 +9,12 @@ import sys
 import webbrowser
 import zipfile
 import re
+import json
 
 # Global variable to store path to Apk_Patch
 APK_PATCH_DIR = os.path.join(os.path.expanduser("~"), "Desktop", "Apk_Patch")
 dependencies_dir = os.path.join(APK_PATCH_DIR, "dependencies")
+LOG_FILE = os.path.join(APK_PATCH_DIR, "modification_log.json")
 
 # Ensure the directories exist
 os.makedirs(dependencies_dir, exist_ok=True)   
@@ -696,6 +698,203 @@ def search():
     print(f"Total folders scanned: {len(next(os.walk(base_folder))[1])}")
     print(f"Total files scanned: {total_files}")
 
+def delete_or_replace_keywords():
+    print("\n=== Keyword Delete or Replace in Base Folder ===\n")
+    print("Do you want to:")
+    print("1. Delete files containing keyword(s) in filename")
+    print("2. Replace keyword(s) inside text files")
+    print("0. Back to Mainmenu")
+
+    choice = input("\nEnter 1, 2, or 0: ").strip()
+    if choice == "0":
+        return
+    
+    base_folder = os.path.join(APK_PATCH_DIR, "base")
+    if not os.path.exists(base_folder):
+        print(f"[!] Base folder not found at: {base_folder}")
+        return
+    
+    keywords_input = input("Enter keyword(s) separated by '|': ").strip().lower()
+    if not keywords_input:
+        print("[!] No keywords provided.")
+        return
+    keywords = [kw.strip() for kw in keywords_input.split("|") if kw.strip()]
+
+    # Load or initialize modification log
+    if os.path.exists(LOG_FILE):
+        with open(LOG_FILE, "r", encoding="utf-8") as f:
+            mod_log = json.load(f)
+    else:
+        mod_log = {"deleted_files": [], "replaced_lines": []}
+
+    if choice == "1":
+        deleted_files = 0
+        print("\n[*] Searching for files to delete...\n")
+
+        # Ask upfront if user wants to delete all matches without further prompts
+        delete_all = False
+        delete_all_input = input("Type 'yes' to delete ALL matched files without asking, or press Enter to confirm each: ").strip().lower()
+        if delete_all_input == "yes":
+            delete_all = True
+
+        for root, _, files in os.walk(base_folder):
+            for file in files:
+                lower_file = file.lower()
+                if any(kw in lower_file for kw in keywords):
+                    file_path = os.path.join(root, file)
+                    print(f"\nFile matched for deletion: {file_path}")
+                    if delete_all:
+                        confirm = "y"
+                    else:
+                        confirm = input("Delete this file? (y/n): ").strip().lower()
+
+                    if confirm == "y":
+                        try:
+                            os.remove(file_path)
+                            deleted_files += 1
+                            print(f"[Deleted] {file_path}")
+                            # Log deleted file
+                            mod_log["deleted_files"].append({"file_path": file_path})
+                        except Exception as e:
+                            print(f"[!] Failed to delete: {file_path} - {e}")
+
+        print(f"\n[✓] Deleted {deleted_files} files matching keyword(s).")
+
+
+    elif choice == "2":
+        replaced_files = 0
+        print("\n[*] Searching for keywords inside files for replacement...\n")
+        replace_with = input("Enter replacement text: ").strip()
+
+        # Ask upfront if user wants to replace all matches without further prompts
+        replace_all = False
+        replace_all_input = input("Type 'yes' to replace ALL matched keywords without asking, or press Enter to confirm each: ").strip().lower()
+        if replace_all_input == "yes":
+            replace_all = True
+
+        import re  # import once, can move outside function if you want
+
+        for root, _, files in os.walk(base_folder):
+            for file in files:
+                file_path = os.path.join(root, file)
+                try:
+                    with open(file_path, "r", encoding="utf-8") as f:
+                        lines = f.readlines()
+                except Exception:
+                    # skip unreadable files (binary, etc)
+                    continue
+
+                changed = False
+                for i, line in enumerate(lines):
+                    lower_line = line.lower()
+                    for kw in keywords:
+                        if kw in lower_line:
+                            print(f"\nFile: {file_path}")
+                            print(f"Line {i+1}: {line.strip()}")
+                            if replace_all:
+                                confirm = "y"
+                            else:
+                                confirm = input(f"Replace '{kw}' with '{replace_with}' in this line? (y/n): ").strip().lower()
+
+                            if confirm == "y":
+                                # Save original before replacement for log
+                                mod_log["replaced_lines"].append({
+                                    "file_path": file_path,
+                                    "line_number": i+1,
+                                    "original_line": line.rstrip('\n'),
+                                    "keyword": kw,
+                                    "replacement": replace_with
+                                })
+                                # Case-insensitive replace
+                                pattern = re.compile(re.escape(kw), re.IGNORECASE)
+                                lines[i] = pattern.sub(replace_with, line)
+                                changed = True
+                            break  # Only first keyword per line for simplicity
+
+                if changed:
+                    try:
+                        with open(file_path, "w", encoding="utf-8") as f:
+                            f.writelines(lines)
+                        replaced_files += 1
+                        print(f"[Replaced in] {file_path}")
+                    except Exception as e:
+                        print(f"[!] Failed to write changes to {file_path} - {e}")
+
+        print(f"\n[✓] Replaced keywords in {replaced_files} files.")
+
+    else:
+        print("\nInvalid choice!")
+        return
+    
+    # Save modification log after changes
+    with open(LOG_FILE, "w", encoding="utf-8") as f:
+        json.dump(mod_log, f, indent=4)
+
+    print(f"\n[✓] Modification log saved to {LOG_FILE}\n")
+
+def revert_modifications():
+    print("\n=== Revert Deleted/Replaced Modifications ===\n")
+
+    if not os.path.exists(LOG_FILE):
+        print("[!] No modification log found.")
+        return
+
+    with open(LOG_FILE, "r", encoding="utf-8") as f:
+        mod_log = json.load(f)
+
+    # Revert replaced lines
+    replaced = mod_log.get("replaced_lines", [])
+    if replaced:
+        print(f"Reverting {len(replaced)} replaced lines...\n")
+        # Group replacements by file for efficiency
+        from collections import defaultdict
+        file_changes = defaultdict(list)
+        for entry in replaced:
+            file_changes[entry["file_path"]].append(entry)
+
+        for file_path, changes in file_changes.items():
+            try:
+                with open(file_path, "r", encoding="utf-8") as f:
+                    lines = f.readlines()
+            except Exception as e:
+                print(f"[!] Could not read {file_path}: {e}")
+                continue
+
+            changed = False
+            for change in changes:
+                line_idx = change["line_number"] - 1
+                if 0 <= line_idx < len(lines):
+                    print(f"Reverting line {change['line_number']} in {file_path}")
+                    print(f"Current: {lines[line_idx].strip()}")
+                    print(f"Original: {change['original_line']}")
+                    lines[line_idx] = change["original_line"] + "\n"
+                    changed = True
+
+            if changed:
+                try:
+                    with open(file_path, "w", encoding="utf-8") as f:
+                        f.writelines(lines)
+                    print(f"[Reverted] {file_path}")
+                except Exception as e:
+                    print(f"[!] Failed to write {file_path}: {e}")
+
+    else:
+        print("No replaced lines to revert.")
+
+    # Deleted files cannot be restored automatically — just list them
+    deleted = mod_log.get("deleted_files", [])
+    if deleted:
+        print(f"\nNote: {len(deleted)} files were deleted and cannot be restored automatically.")
+        print("List of deleted files:")
+        for entry in deleted:
+            print(f"- {entry['file_path']}")
+    else:
+        print("No deleted files logged.")
+
+    print("\n[✓] Revert operation completed.")
+
+
+
 
 def main():
     print("\n=== APK Patcher ===\n")
@@ -707,6 +906,8 @@ def main():
     print("[+] 6. Install Signed APK via ADB")
     print("[+] 7. Clear old APK files")
     print("[+] 8. Search for keyword(s) in base folder")
+    print("[+] 9. Delete and replace files/words matching keyword(s) in base folder")
+    print("[+] 10. Revert deleted/replaced modifications")
     print("[+] 0. Back to Mainmenu")
 
     choice = input("\nEnter the number of your choice: ").strip()
@@ -727,6 +928,10 @@ def main():
         clear_old_apk_files()
     elif choice == "8":
         search()
+    elif choice == "9":
+        delete_or_replace_keywords()
+    elif choice == "10":
+        revert_modifications()
     else:
         return
     
