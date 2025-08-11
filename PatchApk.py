@@ -458,7 +458,7 @@ def pack_Apk():
     subdirs = [
         os.path.join(APK_PATCH_DIR, d)
         for d in os.listdir(APK_PATCH_DIR)
-        if os.path.isdir(os.path.join(APK_PATCH_DIR, d)) and d.lower() != "dependencies"
+        if os.path.isdir(os.path.join(APK_PATCH_DIR, d)) and d.lower() != "dependencies" and d.lower() != "signed"
     ]
 
     if not subdirs:
