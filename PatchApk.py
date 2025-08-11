@@ -10,6 +10,8 @@ import webbrowser
 import zipfile
 import re
 import json
+import tkinter as tk
+from tkinter import filedialog
 
 # Global variable to store path to Apk_Patch
 APK_PATCH_DIR = os.path.join(os.path.expanduser("~"), "Desktop", "Apk_Patch")
@@ -17,7 +19,8 @@ dependencies_dir = os.path.join(APK_PATCH_DIR, "dependencies")
 LOG_FILE = os.path.join(APK_PATCH_DIR, "modification_log.json")
 
 # Ensure the directories exist
-os.makedirs(dependencies_dir, exist_ok=True)   
+os.makedirs(dependencies_dir, exist_ok=True)  
+
 
 def PORE():
     print("\n[⏸] Press ENTER to Restart or anykey to Exit...")
@@ -27,13 +30,15 @@ def PORE():
     main()
     PORE()
     
-def download_with_progress(url, dest):
+def download_with_progress(url, dest, progress_callback):
     def show_progress(block_num, block_size, total_size):
         downloaded = block_num * block_size
         percent = int(downloaded * 100 / total_size) if total_size > 0 else 0
         bar = f"[{'#' * (percent // 2):<50}] {percent}%"
         sys.stdout.write('\r' + bar)
         sys.stdout.flush()
+        if progress_callback:
+            progress_callback(percent)
     urllib.request.urlretrieve(url, dest, reporthook=show_progress)
     print() 
 
@@ -55,9 +60,9 @@ def run_adb_command(args):
         except (FileNotFoundError, subprocess.CalledProcessError):
             continue
 
-    return False
+    return None
 
-def check_dependency():
+def check_dependency(progress_callback=None):
 
     def ensure_jar_present(name, url, target_name, min_size=None):
         for file in os.listdir(dependencies_dir):
@@ -78,8 +83,8 @@ def check_dependency():
         dest_path = os.path.join(dependencies_dir, target_name_with_ext)
 
         try:
-            download_with_progress(url, dest_path)
-            print(f"[✔] Downloaded {name} to:\n    {dest_path}")
+            download_with_progress(url, dest_path, progress_callback)
+            print(f"[+] Downloaded {name} to:\n    {dest_path}")
             return dest_path
         except Exception as e:
             print(f"[✖] Failed to download {name}: {e}")
@@ -105,7 +110,7 @@ def check_dependency():
             try:
                 with zipfile.ZipFile(zip_path, 'r') as zip_ref:
                     zip_ref.extractall(dependencies_dir)
-                print(f"[✔] Extracted ADB to: {dependencies_dir}")
+                print(f"[+] Extracted ADB to: {dependencies_dir}")
             except Exception as e:
                 print(f"[✖] Failed to unzip ADB: {e}")
 
@@ -135,19 +140,21 @@ def check_dependency():
     )
 
     # === JADX CHECK ===
-    jadx_found = False
-    for file in os.listdir(dependencies_dir):
-        if "jadx" in file.lower():
-            jadx_found = True
-            print(f"[+] JADX found: {file}")
-            break
-    
-    if not jadx_found:
-        print("\n[!] JADX not found.")
-        print("    You can download it from:\n    https://github.com/skylot/jadx/releases")
-        choice = input("[?] Do you want to open the download page in your browser? (y/n): ").strip().lower()
-        if choice == 'y':
-            webbrowser.open("https://github.com/skylot/jadx/releases")
+    zip_path = ensure_jar_present(
+        name="jadx",
+        url="https://github.com/skylot/jadx/releases/download/v1.5.2/jadx-gui-1.5.2-with-jre-win.zip",
+        target_name="jadx",
+        min_size=142_000_000
+    )
+    if zip_path:
+            print(f"[+] Extracting Jadx to {dependencies_dir}...")
+            try:
+                with zipfile.ZipFile(zip_path, 'r') as zip_ref:
+                    zip_ref.extractall(dependencies_dir)
+                print(f"[+] Extracted Jadx to: {dependencies_dir}")
+            except Exception as e:
+                print(f"[✖] Failed to unzip Jadx: {e}")
+
 
 def select_Apk():
 
@@ -174,8 +181,11 @@ def select_Apk():
     def pull_apk_from_device():
         try:
             result = run_adb_command(["devices"])
+            if result is None:
+                print("[!] ADB not found in path or is missing.")
+                return  # or handle error appropriately
             devices_output = result.stdout.strip().splitlines()
-
+            
              # Filter devices (ignore the first line: "List of devices attached")
             connected_devices = [
                 line for line in devices_output[1:]
@@ -239,7 +249,7 @@ def select_Apk():
                 print(f"    → Saving to: {local_apk_path}")
                 run_adb_command(["pull", remote_path, local_apk_path])
 
-            print(f"\n[✔] APK(s) pulled successfully to: {APK_PATCH_DIR}")
+            print(f"\n[+] APK(s) pulled successfully to: {APK_PATCH_DIR}")
 
         except FileNotFoundError:
             print("\n[!] 'adb' not found. Make sure it's installed and added to your system PATH.")
@@ -275,7 +285,7 @@ def select_Apk():
                     print("\n[!] Path not found.")
                     continue
                 if os.path.isfile(path) and path.lower().endswith(('.apk', '.xapk')):
-                    print(f"\n[✔] APK file selected: {path}")
+                    print(f"\n[+] APK file selected: {path}")
                     return path
                 elif os.path.isdir(path):
                     current_path = path
@@ -313,7 +323,10 @@ def select_Apk():
 
             print("0. 🔙 Go up one folder")
             print("💡 You can also paste a full path to a folder or APK file")
-            choice = input("\nEnter your choice: \n").strip()
+            choice = input("\nEnter c to cancel or Enter your choice: \n").strip()
+            if choice.lower() in ("c", "cancel"):
+                print("\n[!] Selection cancelled by user.")
+                return None
 
             # Path input again
             if not choice.isdigit():
@@ -322,7 +335,7 @@ def select_Apk():
                     print("[!] Path not found.")
                     continue
                 if os.path.isfile(path) and path.lower().endswith(('.apk', '.xapk')):
-                    print(f"\n[✔] APK file selected: {path}")
+                    print(f"\n[+] APK file selected: {path}")
                     return path
                 elif os.path.isdir(path):
                     current_path = path
@@ -355,28 +368,55 @@ def select_Apk():
                 current_path = selected_path
                 continue
             else:
-                print(f"\n[✔] APK file selected: {selected_path}")
+                print(f"\n[+] APK file selected: {selected_path}")
 
                 destination_path = os.path.join(APK_PATCH_DIR, "base.apk")
 
                 try:
                     shutil.copy2(selected_path, destination_path)
-                    print(f"\n[✔] Copied APK to Apk_Patch folder:\n    {destination_path}")
+                    print(f"\n[+] Copied APK to Apk_Patch folder:\n    {destination_path}")
                     return
                 except Exception as e:
                     print(f"\n[!] Failed to copy APK: {e}")
 
+    def select_apk_from_folder():
+        root = tk.Tk()
+        root.withdraw()  # Hide the main window
+
+        apk_path = filedialog.askopenfilename(
+            title="Select APK or XAPK file",
+            filetypes=[("APK files", "*.apk"), ("XAPK files", "*.xapk"), ("All files", "*.*")]
+        )
+        root.destroy()  
+
+        if not apk_path:
+            print("\n[!] No file selected.")
+            return None
+
+        print(f"\n[+] APK file selected: {apk_path}")
+
+        destination_path = os.path.join(APK_PATCH_DIR, "base.apk")
+        try:
+            shutil.copy2(apk_path, destination_path)
+            print(f"\n[+] Copied APK to Apk_Patch folder:\n    {destination_path}")
+        except Exception as e:
+            print(f"\n[!] Failed to copy APK: {e}")
+
+
     print("\nDo you have the app installed on your phone or do you have the APK files on your PC?")
     print("1. App is installed on the phone (pull from device)")
-    print("2. APK files are on my PC")
+    print("2. APK files are on my PC (pull from cli)")
+    print("3. APK files are on my PC (pull from window explorer)")
     print("0. Back to Mainmenu")
 
-    choice = input("\nEnter 1 or 2: ").strip()
+    choice = input("\nEnter 1, 2 or 3: ").strip()
 
     if choice == "1":
         pull_apk_from_device()
     elif choice == "2":
         select_apk_from_drive()
+    elif choice == "3":
+        select_apk_from_folder()
     else:
         print("\nInvalid choice!")
         main()
@@ -419,7 +459,7 @@ def unpack_Apk():
 
     try:
         subprocess.run(["apktool", "d", apk_path, "-o", unpack_dir, "-f"], check=True)
-        print(f"\n[✔] APK successfully unpacked into:\n    {unpack_dir}")
+        print(f"\n[+] APK successfully unpacked into:\n    {unpack_dir}")
     except FileNotFoundError:
         print("\n[!] 'apktool' not found in system PATH. Trying local dependency...")
 
@@ -434,7 +474,7 @@ def unpack_Apk():
         if apktool_jar:
             try:
                 subprocess.run(["java", "-jar", apktool_jar, "d", apk_path, "-o", unpack_dir, "-f"], check=True)
-                print(f"\n[✔] APK successfully unpacked using local apktool into:\n    {unpack_dir}")
+                print(f"\n[+] APK successfully unpacked using local apktool into:\n    {unpack_dir}")
             except subprocess.CalledProcessError as e:
                 print(f"\n[!] Failed to unpack APK with local apktool: {e}")
         else:
@@ -483,7 +523,7 @@ def pack_Apk():
             ["java", "-jar", apktool_path, "b", src_folder, "-o", output_apk_path],
             check=True
         )
-        print(f"[✔] APK successfully rebuilt to:\n    {output_apk_path}")
+        print(f"[+] APK successfully rebuilt to:\n    {output_apk_path}")
 
     except subprocess.CalledProcessError as e:
         print("\n[!] Failed to build APK.\n")
@@ -557,7 +597,7 @@ def sign_Apk():
         os.remove(os.path.join(signed_dir, f))
         print(f"[🗑] Deleted unsigned APK: {f}")
 
-    print("\n[✔] All APKs signed successfully and saved to:")
+    print("\n[+] All APKs signed successfully and saved to:")
     print(f"    {signed_dir}")
 
 def install_Apk():
@@ -592,7 +632,7 @@ def install_Apk():
                 capture_output=True,
                 text=True
             )
-            print(f"[✔] Install Success:\n{result.stdout}")
+            print(f"[+] Install Success:\n{result.stdout}")
         else:
             # Multiple APKs, use install-multiple
             result = subprocess.run(
@@ -601,7 +641,7 @@ def install_Apk():
                 capture_output=True,
                 text=True
             )
-            print(f"[✔] Install Success:\n{result.stdout}")
+            print(f"[+] Install Success:\n{result.stdout}")
     except subprocess.CalledProcessError as e:
         print(f"[!] Install Failed:\n{e.stderr}")
 
@@ -631,11 +671,10 @@ def clear_old_apk_files():
         except Exception as e:
             print(f"[!] Error deleting {item}: {e}")
 
-    print("[✔] Cleanup complete. Only 'dependencies' folder remains.")
+    print("[+] Cleanup complete. Only 'dependencies' folder remains.")
 
-def search():
+def search(selected_types=None, progress_callback=None):
     print("\n=== Keyword Search in Base Folder ===\n")
-
     base_folder = os.path.join(APK_PATCH_DIR, "base")
 
     if not os.path.exists(base_folder):
@@ -651,11 +690,15 @@ def search():
 
     matched_results = []
     all_files = []
-    
+
     # Gather all files to process
     for root, _, files in os.walk(base_folder):
         for file in files:
-            all_files.append((root, file))
+            if selected_types:
+                if any(file.lower().endswith(ext) for ext in selected_types):
+                    all_files.append((root, file))
+            else:
+                all_files.append((root, file))
 
     total_files = len(all_files)
     if total_files == 0:
@@ -686,6 +729,10 @@ def search():
         percent = int(((idx + 1) / total_files) * 100)
         sys.stdout.write(f"\rProgress: {percent}%")
         sys.stdout.flush()
+
+        # GUI progress
+        if progress_callback:
+            progress_callback(percent)
 
     print("\n\n=== Matches Found ===")
     if matched_results:
