@@ -50,11 +50,15 @@ def run_adb_command(args):
 
     for adb_cmd in adb_commands:
         try:
+            startupinfo = subprocess.STARTUPINFO()
+            startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW  # hide window
+
             result = subprocess.run(
                 adb_cmd,
                 capture_output=True,
                 text=True,
-                check=True
+                check=True,
+                startupinfo=startupinfo
             )
             return result
         except (FileNotFoundError, subprocess.CalledProcessError):
@@ -458,7 +462,7 @@ def unpack_Apk():
     os.makedirs(unpack_dir, exist_ok=True)
 
     try:
-        subprocess.run(["apktool", "d", apk_path, "-o", unpack_dir, "-f"], check=True)
+        subprocess.run(["apktool", "d", apk_path, "-o", unpack_dir, "-f"], check=True, creationflags=subprocess.CREATE_NO_WINDOW)
         print(f"\n[+] APK successfully unpacked into:\n    {unpack_dir}")
     except FileNotFoundError:
         print("\n[!] 'apktool' not found in system PATH. Trying local dependency...")
@@ -473,7 +477,7 @@ def unpack_Apk():
 
         if apktool_jar:
             try:
-                subprocess.run(["java", "-jar", apktool_jar, "d", apk_path, "-o", unpack_dir, "-f"], check=True)
+                subprocess.run(["java", "-jar", apktool_jar, "d", apk_path, "-o", unpack_dir, "-f"], check=True, creationflags=subprocess.CREATE_NO_WINDOW)
                 print(f"\n[+] APK successfully unpacked using local apktool into:\n    {unpack_dir}")
             except subprocess.CalledProcessError as e:
                 print(f"\n[!] Failed to unpack APK with local apktool: {e}")
@@ -521,7 +525,8 @@ def pack_Apk():
     try:
         result = subprocess.run(
             ["java", "-jar", apktool_path, "b", src_folder, "-o", output_apk_path],
-            check=True
+            check=True,
+            creationflags=subprocess.CREATE_NO_WINDOW
         )
         print(f"[+] APK successfully rebuilt to:\n    {output_apk_path}")
 
@@ -535,6 +540,8 @@ def sign_Apk():
     dependencies_dir = os.path.join(APK_PATCH_DIR, "dependencies")
     signer_path = os.path.join(dependencies_dir, "ubersigner.jar")
     signed_dir = os.path.join(APK_PATCH_DIR, "signed")
+    shutil.rmtree(signed_dir, ignore_errors=True)  # delete the folder if it exists
+
 
     if not os.path.exists(signer_path):
         print("\n[!] ubersigner.jar not found in dependencies.")
@@ -576,7 +583,8 @@ def sign_Apk():
         subprocess.run(
             ["java", "-jar", signer_path, "-a", "signed", "--allowResign"],
             cwd=APK_PATCH_DIR,
-            check=True
+            check=True,
+            creationflags=subprocess.CREATE_NO_WINDOW
         )
     except subprocess.CalledProcessError as e:
         print("[!] Signing failed.")
@@ -630,7 +638,8 @@ def install_Apk():
                 ["adb", "install", apk_paths[0]],
                 check=True,
                 capture_output=True,
-                text=True
+                text=True, 
+                creationflags=subprocess.CREATE_NO_WINDOW
             )
             print(f"[+] Install Success:\n{result.stdout}")
         else:
@@ -639,7 +648,8 @@ def install_Apk():
                 ["adb", "install-multiple"] + apk_paths,
                 check=True,
                 capture_output=True,
-                text=True
+                text=True, 
+                creationflags=subprocess.CREATE_NO_WINDOW
             )
             print(f"[+] Install Success:\n{result.stdout}")
     except subprocess.CalledProcessError as e:
@@ -673,18 +683,18 @@ def clear_old_apk_files():
 
     print("[+] Cleanup complete. Only 'dependencies' folder remains.")
 
-def search(selected_types=None, progress_callback=None):
+def search(selected_types=None, progress_callback=None, as_json=False):
     print("\n=== Keyword Search in Base Folder ===\n")
     base_folder = os.path.join(APK_PATCH_DIR, "base")
 
     if not os.path.exists(base_folder):
         print(f"[!] Base folder not found at: {base_folder}")
-        return
+        return [] if as_json else None
     
     keywords_input = input("Enter keyword(s) or sentence(s) separated by |: ").strip()
     if not keywords_input:
         print("[!] No keywords provided.")
-        return
+        return [] if as_json else None
 
     keywords = [' '.join(kw.strip().lower().split()) for kw in keywords_input.split("|") if kw.strip()]
 
@@ -703,7 +713,7 @@ def search(selected_types=None, progress_callback=None):
     total_files = len(all_files)
     if total_files == 0:
         print("[!] No files found in base folder.")
-        return
+        return [] if as_json else None
 
     # Start search
     print("[*] Scanning files...\n")
@@ -718,9 +728,19 @@ def search(selected_types=None, progress_callback=None):
                     for keyword in keywords:
                         words = keyword.split()
                         if all(word in lower_line for word in words):
-                            matched_results.append(
-                                f"{len(matched_results)+1}. {keyword} found in line {line_num} on {file} under {folder_name}"
-                            )
+                            if as_json:
+                                matched_results.append({
+                                    "id": len(matched_results) + 1,
+                                    "keyword": keyword,
+                                    "line_num": line_num,
+                                    "file": file,
+                                    "folder": folder_name,
+                                    "path": file_path
+                                })
+                            else:
+                                matched_results.append(
+                                    f"{len(matched_results)+1}. {keyword} found in line {line_num} on {file} under {folder_name}"
+                                )
                             break  # Stop after first match per line
         except Exception:
             pass  # Ignore unreadable files
@@ -734,7 +754,10 @@ def search(selected_types=None, progress_callback=None):
         if progress_callback:
             progress_callback(percent)
 
-    print("\n\n=== Matches Found ===")
+    if as_json:
+        return matched_results
+    else:
+        print("\n\n=== Matches Found ===")
     if matched_results:
         for match in matched_results:
             print(match)

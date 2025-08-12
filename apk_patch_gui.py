@@ -1,11 +1,13 @@
 import os
 import re
 import sys
+import json
 import builtins
 import threading
 import queue
 import importlib
 import tkinter as tk
+import subprocess
 from tkinter import ttk, messagebox, simpledialog
 import PatchApk as apk_mod # Your module
 
@@ -18,7 +20,6 @@ file_type_vars = {}
 # Helper Functions
 def get_selected_file_types():
     return [ft.lower() for ft, var in file_type_vars.items() if var.get()]
-
 
 # ---------- UI helpers ----------
 class TextRedirector:
@@ -242,15 +243,92 @@ def create_gui():
         global search_mode
         search_mode = value
 
+    def create_message_box(results):
+        print("\n\n=== Matches Found ===")
+        
+        # Create a new popup window
+        popup = tk.Toplevel(root)
+        popup.title("Goto File")
+        popup.geometry("600x300")
+       
+         # Label
+        tk.Label(popup, text="Click a file path to open:", font=("Arial", 12, "bold")).pack(pady=5)
+
+        # Listbox for paths (non-editable)
+        listbox = tk.Listbox(popup, font=("Consolas", 10), selectmode=tk.SINGLE)
+        listbox.pack(fill=tk.BOTH, expand=True, padx=10, pady=5)
+
+        # Populate listbox with path values
+        for item in results:
+            print(f"{item['id']}. {item['keyword']} found in line {item['line_num']} on {item['file']} under {item['folder']}")
+            listbox.insert(tk.END, f"{item['id']}. {item['path']} (line {item['line_num']})")
+
+        # Function to open file when double-clicked
+        def open_selected(event):
+            selection = listbox.curselection()
+            if not selection:
+                print("DEBUG: No selection")
+                return
+            
+            # Get the original item from results so we can get line_num
+            index = selection[0]
+            item = results[index]
+            file_path = item['path']
+            line_num = item['line_num']
+            
+            print(f"DEBUG: Trying to open {file_path} at line {line_num}")
+
+            if not os.path.exists(file_path):
+                messagebox.showerror("Error", f"File not found:\n{file_path}")
+                return
+            
+            try:
+                # Try VS Code with line number
+                subprocess.Popen(f'code --goto "{file_path}:{line_num}"', shell=True, creationflags=subprocess.CREATE_NO_WINDOW)
+                return
+            except Exception as e:
+                print(f"DEBUG: VS Code failed: {e}")
+
+            try:
+                # Try Notepad++ (if installed) with line number
+                subprocess.Popen([r"C:\Program Files\Notepad++\notepad++.exe", f"-n{line_num}", file_path], creationflags=subprocess.CREATE_NO_WINDOW)
+                return
+            except Exception as e:
+                print(f"DEBUG: Notepad++ failed: {e}")
+
+            try:
+                # Fallback to Notepad (no line support)
+                subprocess.Popen(["notepad.exe", file_path], creationflags=subprocess.CREATE_NO_WINDOW)
+                return
+            except Exception as e:
+                print(f"DEBUG: Notepad failed: {e}")
+
+            try:
+                # Final fallback: OS default
+                os.startfile(file_path)
+            except Exception as e:
+                messagebox.showerror("Error", f"Could not open file:\n{e}")
+
+        listbox.bind("<Double-1>", open_selected)
+
+        # Close button
+        tk.Button(popup, text="Close", command=popup.destroy).pack(pady=5)
+
     def search_with_flag():
         try:
             set_search_mode(True)
-            apk_mod.search(
+            results = apk_mod.search(
                 get_selected_file_types(),
-                progress_callback=lambda p: root.after(0, update_progress, p)
+                progress_callback=lambda p: root.after(0, update_progress, p),
+                as_json=True
             )
+            if  results:
+                create_message_box(results)
+            else:
+                log_box.insert(tk.END, "No Words Found")
         finally:
             set_search_mode(False)
+
 
     def download_with_flag():
         try:
