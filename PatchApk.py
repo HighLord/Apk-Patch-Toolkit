@@ -1085,6 +1085,7 @@ def main():
     print("[+] 9. Delete and replace files/words matching keyword(s) in base folder")
     print("[+] 10. Revert deleted/replaced modifications")
     print("[+] 11. Patch APK (Remove Ads)")
+    print("[+] 12. Patch APK (Restore Ads)")
     print("[+] 0. Back to Mainmenu")
 
     choice = input("\nEnter the number of your choice: ").strip()
@@ -1111,6 +1112,8 @@ def main():
         revert_modifications()
     elif choice == "11":
         remove_ads()
+    elif choice == "12":
+        restore_ads()
     else:
         return
     
