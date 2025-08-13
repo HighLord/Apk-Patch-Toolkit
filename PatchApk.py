@@ -75,7 +75,7 @@ def check_dependency(progress_callback=None):
                 jar_path = os.path.join(dependencies_dir, file)
                 if not min_size or os.path.getsize(jar_path) >= min_size:
                     print(f"[+] {name} found: {file}")
-                    return jar_path
+                    return True
         print(f"\n[!] {name} not found. Downloading...\n")
 
         _, url_ext = os.path.splitext(url)
@@ -89,7 +89,7 @@ def check_dependency(progress_callback=None):
         try:
             download_with_progress(url, dest_path, progress_callback)
             print(f"[+] Downloaded {name} to:\n    {dest_path}")
-            return dest_path
+            return False
         except Exception as e:
             print(f"[✖] Failed to download {name}: {e}")
             return None
@@ -109,7 +109,7 @@ def check_dependency(progress_callback=None):
         target_name="platform-tools",
         min_size=6_000_000
     )
-        if zip_path:
+        if zip_path == False:
             print(f"[+] Extracting ADB to {dependencies_dir}...")
             try:
                 with zipfile.ZipFile(zip_path, 'r') as zip_ref:
@@ -150,7 +150,7 @@ def check_dependency(progress_callback=None):
         target_name="jadx",
         min_size=142_000_000
     )
-    if zip_path:
+    if zip_path == False:
             print(f"[+] Extracting Jadx to {dependencies_dir}...")
             try:
                 with zipfile.ZipFile(zip_path, 'r') as zip_ref:
@@ -963,6 +963,112 @@ def revert_modifications():
 
     print("\n[✓] Revert operation completed.")
 
+def remove_ads():
+    print("\n[+] Removing ads from APK...")
+
+    keywords = ['reward','adactivity', 'ads', 'interstitial']
+    base_folder = os.path.join(APK_PATCH_DIR, "base")
+
+    if not os.path.exists(base_folder):
+        print(f"[!] Base folder not found at: {base_folder}")
+        return
+    
+    manifest_path = os.path.join(base_folder, "AndroidManifest.xml")
+    count = 0
+
+    # Read all lines first
+    with open(manifest_path, 'r', encoding='utf-8', errors='ignore') as f_in:
+        lines = f_in.readlines()
+
+    with open(manifest_path, 'w', encoding='utf-8') as f_out:
+
+        for line_num, line in enumerate(lines, start=1):
+            lower_line = line.lower()
+
+            # Search for android:name="..."
+            name_match = re.search(r'android:name="([^"]+)"', lower_line, re.IGNORECASE)
+            if name_match:
+                name_value = name_match.group(1).lower()
+
+                # Check if name contains any of the keywords
+                if any(k in name_value for k in keywords):
+
+                    if 'android:enabled=' in line:
+                        # Check if enabled="true" or enabled=true
+                        enabled_true_match = re.search(
+                            r'android:enabled\s*=\s*"true"|android:enabled\s*=\s*true',
+                            line,
+                            re.IGNORECASE
+                        )
+                        if enabled_true_match:
+                            line = re.sub(
+                                r'(android:enabled\s*=\s*)"true"',
+                                r'\1"false"',
+                                line,
+                                flags=re.IGNORECASE
+                            )
+                            line = re.sub(
+                                r'(android:enabled\s*=\s*)true',
+                                r'\1false',
+                                line,
+                                flags=re.IGNORECASE
+                            )
+                            print(f"[Line {line_num}] Changed android:enabled from true to false for {name_value}")
+                            count += 1
+                        else:
+                            print(f"[Line {line_num}] android:enabled already false for {name_value}")
+                    else:
+                        # Insert android:enabled="false" after android:name="..."
+                        insert_pos = name_match.end()
+                        line = line[:insert_pos] + ' android:enabled="false"' + line[insert_pos:]
+                        print(f"[Line {line_num}] Added android:enabled=\"false\" for {name_value}")
+                        count += 1
+
+            f_out.write(line)
+
+    print(f"[✓] Total changes made: {count}")
+    print(f"[+] Patched manifest saved (overwritten) at {manifest_path}")
+    
+def restore_ads():
+    print("\n[+] Restoring ads in APK...")
+
+    keywords = ['reward', 'adactivity', 'ads', 'interstitial']
+    base_folder = os.path.join(APK_PATCH_DIR, "base")
+
+    if not os.path.exists(base_folder):
+        print(f"[!] Base folder not found at: {base_folder}")
+        return
+
+    manifest_path = os.path.join(base_folder, "AndroidManifest.xml")
+    count = 0
+
+    with open(manifest_path, 'r', encoding='utf-8', errors='ignore') as f_in:
+        lines = f_in.readlines()
+
+    with open(manifest_path, 'w', encoding='utf-8') as f_out:
+        for line_num, line in enumerate(lines, start=1):
+            lower_line = line.lower()
+            name_match = re.search(r'android:name="([^"]+)"', lower_line, re.IGNORECASE)
+            if name_match:
+                name_value = name_match.group(1).lower()
+                if any(k in name_value for k in keywords):
+                    if 'android:enabled=' in line:
+                        if re.search(r'android:enabled\s*=\s*"false"|android:enabled\s*=\s*false', line, re.IGNORECASE):
+                            line = re.sub(r'(android:enabled\s*=\s*)"false"', r'\1"true"', line, flags=re.IGNORECASE)
+                            line = re.sub(r'(android:enabled\s*=\s*)false', r'\1true', line, flags=re.IGNORECASE)
+                            print(f"[Line {line_num}] Changed android:enabled from false to true for {name_value}")
+                            count += 1
+                        else:
+                            print(f"[Line {line_num}] android:enabled already true for {name_value}")
+                    else:
+                        insert_pos = name_match.end()
+                        line = line[:insert_pos] + ' android:enabled="true"' + line[insert_pos:]
+                        print(f"[Line {line_num}] Added android:enabled=\"true\" for {name_value}")
+                        count += 1
+            f_out.write(line)
+
+    print(f"[✓] Total changes made: {count}")
+    print(f"[+] Restored manifest saved (overwritten) at {manifest_path}")
 
 
 
@@ -978,6 +1084,7 @@ def main():
     print("[+] 8. Search for keyword(s) in base folder")
     print("[+] 9. Delete and replace files/words matching keyword(s) in base folder")
     print("[+] 10. Revert deleted/replaced modifications")
+    print("[+] 11. Patch APK (Remove Ads)")
     print("[+] 0. Back to Mainmenu")
 
     choice = input("\nEnter the number of your choice: ").strip()
@@ -1002,6 +1109,8 @@ def main():
         delete_or_replace_keywords()
     elif choice == "10":
         revert_modifications()
+    elif choice == "11":
+        remove_ads()
     else:
         return
     

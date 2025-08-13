@@ -85,7 +85,7 @@ class InputRequester:
 def create_gui():
     root = tk.Tk()
     root.title("APKPatch GUI")
-    root.geometry("900x650")
+    root.geometry("900x700")
     root.minsize(900, 600)
 
     # Set ttk style theme (use 'clam', 'alt', 'default', 'classic', etc.)
@@ -118,7 +118,7 @@ def create_gui():
     paned.add(right_frame, weight=3)
 
      # File type selection label
-    ttk.Label(left_frame, text="Select File Types For Search:", font=label_font ).pack(anchor='w', pady=(0, 2))
+    ttk.Label(left_frame, text="Select File Types For Search:", font=label_font ).pack(anchor='w', pady=(0, 0))
 
 
     # File type checkboxes container with padding
@@ -149,7 +149,7 @@ def create_gui():
     log_frame.pack(fill=tk.BOTH, expand=True)
 
     # Text widget without wrap
-    log_box = tk.Text(log_frame, wrap=tk.NONE, height=30)
+    log_box = tk.Text(log_frame, wrap=tk.NONE, height=0)
     log_box.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
     
     # Vertical scrollbar (optional, if you want custom)
@@ -351,6 +351,8 @@ def create_gui():
         ("Search in base folder", search_with_flag),
         ("Delete/Replace keywords", apk_mod.delete_or_replace_keywords),
         ("Revert modifications", apk_mod.revert_modifications),
+        ("Remove ads patch", apk_mod.remove_ads),
+        ("Undo remove ads", apk_mod.restore_ads),
     ]
 
     for i, (label, func) in enumerate(btn_cfg):
